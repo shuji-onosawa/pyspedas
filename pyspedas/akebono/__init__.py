@@ -424,12 +424,13 @@ def vlf_mca(trange=['2012-10-01', '2012-10-02'],
 
 
 def mca_postprocessing(datatype, del_invalid_data):
+    prefix = 'akb_mca_'
     if not del_invalid_data:
         pass
     else:
-        Emax, Bmax, Eave, Bave = get_data('Emax'), get_data('Bmax'), get_data('Eave'), get_data('Bave')
+        Emax, Bmax, Eave, Bave = get_data(prefix+'Emax'), get_data(prefix+'Bmax'), get_data(prefix+'Eave'), get_data(prefix+'Bave')
         Emax_array, Bmax_array, Eave_array, Bave_array = Emax.y.astype(float), Bmax.y.astype(float), Eave.y.astype(float), Bave.y.astype(float)
-        postgap = get_data('postgap')
+        postgap = get_data(prefix+'postgap')
         postgap_arr = postgap.y.T
         postgap_bin_arr = np.array([list(np.binary_repr(x, width=8)) for x in postgap_arr], dtype=int)
         for inst_name in del_invalid_data:
@@ -476,7 +477,6 @@ def mca_postprocessing(datatype, del_invalid_data):
                 Eave_array[pws_index_arr] = np.nan
                 Bave_array[pws_index_arr] = np.nan
 
-        prefix = 'akb_mca_'
         store_data(prefix+'Emax',
                    data={'x': Emax.times, 'y': Emax_array, 'v': Emax.v})
         store_data(prefix+'Bmax',
@@ -485,28 +485,28 @@ def mca_postprocessing(datatype, del_invalid_data):
                    data={'x': Eave.times, 'y': Eave_array, 'v': Eave.v})
         store_data(prefix+'Bave',
                    data={'x': Bave.times, 'y': Bave_array, 'v': Bave.v})
-        options(prefix+'Emax_dB',
-                opt_dict={'spec': 1, 'ylog': 1, 'zlog': 1,
-                          'ytitle': 'Emax', 'ysubtitle': 'Frecuency [Hz]',
-                          'ztitle': 'dB'})
-        options(prefix+'Bmax_dB',
-                opt_dict={'spec': 1, 'ylog': 1, 'zlog': 1,
-                          'ytitle': 'Bmax', 'ysubtitle': 'Frecuency [Hz]',
-                          'ztitle': 'dB'})
-        options(prefix+'Eave_dB',
-                opt_dict={'spec': 1, 'ylog': 1, 'zlog': 1,
-                          'ytitle': 'Eave', 'ysubtitle': 'Frecuency [Hz]',
-                          'ztitle': 'dB'})
-        options(prefix+'Bave_dB',
-                opt_dict={'spec': 1, 'ylog': 1, 'zlog': 1,
-                          'ytitle': 'Bave', 'ysubtitle': 'Frecuency [Hz]',
-                          'ztitle': 'dB'})
 
     if datatype == 'dB':
-        return [prefix+'Emax_dB',
-                prefix+'Bmax_dB',
-                prefix+'Eave_dB',
-                prefix+'Bave_dB']
+        options(prefix+'Emax',
+                opt_dict={'spec': 1, 'ylog': 1, 'zlog': 1,
+                          'yrange': [1, 2e4], 'ytitle': 'Emax', 'ysubtitle': 'Frecuency [Hz]',
+                          'ztitle': 'dB'})
+        options(prefix+'Bmax',
+                opt_dict={'spec': 1, 'ylog': 1, 'zlog': 1,
+                          'yrange': [1, 2e4], 'ytitle': 'Bmax', 'ysubtitle': 'Frecuency [Hz]',
+                          'ztitle': 'dB'})
+        options(prefix+'Eave',
+                opt_dict={'spec': 1, 'ylog': 1, 'zlog': 1,
+                          'yrange': [1, 2e4], 'ytitle': 'Eave', 'ysubtitle': 'Frecuency [Hz]',
+                          'ztitle': 'dB'})
+        options(prefix+'Bave',
+                opt_dict={'spec': 1, 'ylog': 1, 'zlog': 1,
+                          'yrange': [1, 2e4], 'ytitle': 'Bave', 'ysubtitle': 'Frecuency [Hz]',
+                          'ztitle': 'dB'})
+        return [prefix+'Emax',
+                prefix+'Bmax',
+                prefix+'Eave',
+                prefix+'Bave']
     elif datatype == 'pwr':
         mca_h1cdf_dB_to_absolute('pwr')
         return [prefix+'Emax_pwr',
@@ -528,40 +528,40 @@ def dB_to_absolute(dB_value, reference_value):
 def mca_h1cdf_dB_to_absolute(spec_type: str):
     prefix = 'akb_mca_'
     if spec_type == 'pwr':
-        tvar_names = ['Emax', 'Eave', 'Bmax', 'Bave']
+        tvar_names = [prefix+'Emax', prefix+'Eave', prefix+'Bmax', prefix+'Bave']
         for i in range(4):
             tvar = get_data(tvar_names[i])
             tvar_pwr = dB_to_absolute((tvar.y).astype(float), 1e-12)
             # (mV/m)^2/Hz or pT^2/Hz
-            store_data(prefix + tvar_names[i] + '_pwr',
+            store_data(tvar_names[i] + '_pwr',
                        data={'x': tvar.times, 'y': tvar_pwr, 'v': tvar.v})
             if tvar_names[i] == 'Emax' or tvar_names[i] == 'Eave':
                 opt_dict = {'spec': 1, 'ylog': 1, 'zlog': 1,
                             'yrange': [1, 2e4], 'ysubtitle': 'Frequency [Hz]',
                             'zrange': [1e-10, 1e2], 'ztitle': '$[(mV/m)^2/Hz]$'}
-                options(prefix + tvar_names[i] + '_pwr', opt_dict=opt_dict)
+                options(tvar_names[i] + '_pwr', opt_dict=opt_dict)
             if tvar_names[i] == 'Bmax' or tvar_names[i] == 'Bave':
                 opt_dict = {'spec': 1, 'ylog': 1, 'zlog': 1,
                             'yrange': [1, 2e4], 'ysubtitle': 'Frecuency [Hz]',
                             'zrange': [1e-8, 1e6], 'ztitle': '$[pT^2/Hz]$'}
-                options(prefix + tvar_names[i] + '_pwr', opt_dict=opt_dict)
+                options(tvar_names[i] + '_pwr', opt_dict=opt_dict)
 
     if spec_type == 'amp':
-        tvar_names = ['Emax', 'Eave', 'Bmax', 'Bave']
+        tvar_names = [prefix+'Emax', prefix+'Eave', prefix+'Bmax', prefix+'Bave']
         for i in range(4):
             tvar = get_data(tvar_names[i])
             tvar_pwr = dB_to_absolute((tvar.y).astype(float), 1e-12)
             tvar_amp = np.sqrt(tvar_pwr)
             # mV/m/Hz^0.5 or pT/Hz^0.5
-            store_data(prefix + tvar_names[i] + '_amp',
+            store_data(tvar_names[i] + '_amp',
                        data={'x': tvar.times, 'y': tvar_amp, 'v': tvar.v})
             if tvar_names[i] == 'Emax' or tvar_names[i] == 'Eave':
                 opt_dict = {'spec': 1, 'ylog': 1, 'zlog': 1,
                             'yrange': [1, 2e4], 'ysubtitle': 'Frequency [Hz]',
                             'zrange': [1e-4, 10], 'ztitle': '$[mV/m/Hz^{0.5}]$'}
-                options(prefix + tvar_names[i] + '_amp', opt_dict=opt_dict)
+                options(tvar_names[i] + '_amp', opt_dict=opt_dict)
             if tvar_names[i] == 'Bmax' or tvar_names[i] == 'Bave':
                 opt_dict = {'spec': 1, 'ylog': 1, 'zlog': 1,
                             'yrange': [1, 2e4], 'ysubtitle': 'Frequency [Hz]',
                             'zrange': [1e-4, 1e3], 'ztitle': '$[pT/Hz^{0.5}]$'}
-                options(prefix + tvar_names[i] + '_amp', opt_dict=opt_dict)
+                options(tvar_names[i] + '_amp', opt_dict=opt_dict)
