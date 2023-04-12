@@ -1,7 +1,7 @@
 from .load import load
 import numpy as np
 import pandas as pd
-from pytplot import store_data, options
+from pytplot import store_data, options, get_data
 from pyspedas import time_double
 from pyspedas.cotrans.xyz_to_polar import xyz_to_polar
 
@@ -342,3 +342,226 @@ def load_csv_file(filenames, cols=None):
         filenames = [filenames]
     df = pd.concat((pd.read_csv(f, header=0, delim_whitespace=True, dtype=str, names=cols) for f in filenames), ignore_index=True)
     return df
+
+
+def vlf_mca(trange=['2012-10-01', '2012-10-02'],
+            datatype='dB',
+            del_invalid_data=None,
+            suffix='',
+            get_support_data=False,
+            varformat=None,
+            varnames=[],
+            downloadonly=False,
+            notplot=False,
+            no_update=False,
+            time_clip=False):
+    """
+    This function loads data from the Plasma Waves and Sounder experiment (PWS)
+    
+    Parameters
+    ----------
+        trange : list of str
+            time range of interest [starttime, endtime] with the format 
+            'YYYY-MM-DD','YYYY-MM-DD'] or to specify more or less than a day 
+            ['YYYY-MM-DD/hh:mm:ss','YYYY-MM-DD/hh:mm:ss']
+
+        datatype: str
+            Data type; Valid options:
+                'dB': decibel, 0[dB]=10^-6[mV/m] for E-field and 0[dB]=10^-6[pT] for B-field,
+                'amp': mV/m/Hz^1/2 or nT/Hz^1/2
+                'pwr': (mV/m)^2/Hz or nT^2/Hz
+
+        del_invalid_data :  list of string.
+            mca cdf contain data from which the interference by BDR or SMS is *not* yet removed.
+            You can remove data contaminated by interference by passing a list containing the following words.
+            'off': mca is off
+            'noisy': data is noisy
+            'sms': SMS on
+            'bdr': BDR on
+            'bit rate m': Bit rate is medium. When the bit rate is medium, the data is not reliable.
+            'pws': PWS sounder on
+        suffix: str
+            The tplot variable names will be given this suffix.  By default,
+            no suffix is added.
+
+        get_support_data: bool
+            Data with an attribute "VAR_TYPE" with a value of "support_data"
+            will be loaded into tplot.  By default, only loads in data with a
+            "VAR_TYPE" attribute of "data".
+
+        varformat: str
+            The file variable formats to load into tplot.  Wildcard character
+            "*" is accepted.  By default, all variables are loaded in.
+
+        varnames: list of str
+            List of variable names to load (if not specified,
+            all data variables are loaded)
+
+        downloadonly: bool
+            Set this flag to download the CDF files, but not load them into
+            tplot variables
+
+        notplot: bool
+            Return the data in hash tables instead of creating tplot variables
+
+        no_update: bool
+            If set, only load data from your local cache
+
+        time_clip: bool
+            Time clip the variables to exactly the range specified in the trange keyword
+
+    Returns
+    ----------
+        List of tplot variables created.
+    """
+
+    tvars = load(instrument='mca', trange=trange, datatype=datatype, suffix=suffix, get_support_data=get_support_data, varformat=varformat, varnames=varnames, downloadonly=downloadonly, notplot=notplot, time_clip=time_clip, no_update=no_update)
+
+    if tvars is None or notplot or downloadonly:
+        return tvars
+    
+    return mca_postprocessing(datatype, del_invalid_data)
+
+
+def mca_postprocessing(datatype, del_invalid_data):
+    if not del_invalid_data:
+        pass
+    else:
+        Emax, Bmax, Eave, Bave = get_data('Emax'), get_data('Bmax'), get_data('Eave'), get_data('Bave')
+        Emax_array, Bmax_array, Eave_array, Bave_array = Emax.y.astype(float), Bmax.y.astype(float), Eave.y.astype(float), Bave.y.astype(float)
+        postgap = get_data('postgap')
+        postgap_arr = postgap.y.T
+        postgap_bin_arr = np.array([list(np.binary_repr(x, width=8)) for x in postgap_arr], dtype=int)
+        for inst_name in del_invalid_data:
+            inst_name = inst_name.lower()
+            if inst_name in ['off', 'noisy', 'bdr', 'sms', 'bit rate m', 'pws']:
+                pass
+            else:
+                raise Exception('del_invalid_data list must consist of either off, noisy, bdr, sms, bit rate m or pws')
+
+            if inst_name == 'off':
+                nodata_index_arr = np.nonzero(postgap_bin_arr[:, 7])[0]
+                Emax_array[nodata_index_arr] = np.nan
+                Bmax_array[nodata_index_arr] = np.nan
+                Eave_array[nodata_index_arr] = np.nan
+                Bave_array[nodata_index_arr] = np.nan
+            if inst_name == 'noisy':
+                noisy_index_arr = np.nonzero(postgap_bin_arr[:, 6])[0]
+                Emax_array[noisy_index_arr] = np.nan
+                Bmax_array[noisy_index_arr] = np.nan
+                Eave_array[noisy_index_arr] = np.nan
+                Bave_array[noisy_index_arr] = np.nan
+            if inst_name == 'bdr':
+                bdr_index_arr = np.nonzero(postgap_bin_arr[:, 3])[0]
+                Emax_array[bdr_index_arr] = np.nan
+                Bmax_array[bdr_index_arr] = np.nan
+                Eave_array[bdr_index_arr] = np.nan
+                Bave_array[bdr_index_arr] = np.nan
+            if inst_name == 'sms':
+                sms_index_arr = np.nonzero(postgap_bin_arr[:, 2])[0]
+                Emax_array[sms_index_arr] = np.nan
+                Bmax_array[sms_index_arr] = np.nan
+                Eave_array[sms_index_arr] = np.nan
+                Bave_array[sms_index_arr] = np.nan
+            if inst_name == 'bit rate m':
+                bitrate_index_arr = np.nonzero(postgap_bin_arr[:, 1])[0]
+                Emax_array[bitrate_index_arr] = np.nan
+                Bmax_array[bitrate_index_arr] = np.nan
+                Eave_array[bitrate_index_arr] = np.nan
+                Bave_array[bitrate_index_arr] = np.nan
+            if inst_name == 'pws':
+                pws_index_arr = np.nonzero(postgap_bin_arr[:, 0])[0]
+                Emax_array[pws_index_arr] = np.nan
+                Bmax_array[pws_index_arr] = np.nan
+                Eave_array[pws_index_arr] = np.nan
+                Bave_array[pws_index_arr] = np.nan
+
+        prefix = 'akb_mca_'
+        store_data(prefix+'Emax',
+                   data={'x': Emax.times, 'y': Emax_array, 'v': Emax.v})
+        store_data(prefix+'Bmax',
+                   data={'x': Bmax.times, 'y': Bmax_array, 'v': Bmax.v})
+        store_data(prefix+'Eave',
+                   data={'x': Eave.times, 'y': Eave_array, 'v': Eave.v})
+        store_data(prefix+'Bave',
+                   data={'x': Bave.times, 'y': Bave_array, 'v': Bave.v})
+        options(prefix+'Emax_dB',
+                opt_dict={'spec': 1, 'ylog': 1, 'zlog': 1,
+                          'ytitle': 'Emax', 'ysubtitle': 'Frecuency [Hz]',
+                          'ztitle': 'dB'})
+        options(prefix+'Bmax_dB',
+                opt_dict={'spec': 1, 'ylog': 1, 'zlog': 1,
+                          'ytitle': 'Bmax', 'ysubtitle': 'Frecuency [Hz]',
+                          'ztitle': 'dB'})
+        options(prefix+'Eave_dB',
+                opt_dict={'spec': 1, 'ylog': 1, 'zlog': 1,
+                          'ytitle': 'Eave', 'ysubtitle': 'Frecuency [Hz]',
+                          'ztitle': 'dB'})
+        options(prefix+'Bave_dB',
+                opt_dict={'spec': 1, 'ylog': 1, 'zlog': 1,
+                          'ytitle': 'Bave', 'ysubtitle': 'Frecuency [Hz]',
+                          'ztitle': 'dB'})
+
+    if datatype == 'dB':
+        return [prefix+'Emax_dB',
+                prefix+'Bmax_dB',
+                prefix+'Eave_dB',
+                prefix+'Bave_dB']
+    elif datatype == 'pwr':
+        mca_h1cdf_dB_to_absolute('pwr')
+        return [prefix+'Emax_pwr',
+                prefix+'Bmax_pwr',
+                prefix+'Eave_pwr',
+                prefix+'Bave_pwr']
+    elif datatype == 'amp':
+        mca_h1cdf_dB_to_absolute('amp')
+        return [prefix+'Emax_amp',
+                prefix+'Bmax_amp',
+                prefix+'Eave_amp',
+                prefix+'Bave_amp']
+
+
+def dB_to_absolute(dB_value, reference_value):
+    return reference_value * 10**(dB_value/10)
+
+
+def mca_h1cdf_dB_to_absolute(spec_type: str):
+    prefix = 'akb_mca_'
+    if spec_type == 'pwr':
+        tvar_names = ['Emax', 'Eave', 'Bmax', 'Bave']
+        for i in range(4):
+            tvar = get_data(tvar_names[i])
+            tvar_pwr = dB_to_absolute((tvar.y).astype(float), 1e-12)
+            # (mV/m)^2/Hz or pT^2/Hz
+            store_data(prefix + tvar_names[i] + '_pwr',
+                       data={'x': tvar.times, 'y': tvar_pwr, 'v': tvar.v})
+            if tvar_names[i] == 'Emax' or tvar_names[i] == 'Eave':
+                opt_dict = {'spec': 1, 'ylog': 1, 'zlog': 1,
+                            'yrange': [1, 2e4], 'ysubtitle': 'Frequency [Hz]',
+                            'zrange': [1e-10, 1e2], 'ztitle': '$[(mV/m)^2/Hz]$'}
+                options(prefix + tvar_names[i] + '_pwr', opt_dict=opt_dict)
+            if tvar_names[i] == 'Bmax' or tvar_names[i] == 'Bave':
+                opt_dict = {'spec': 1, 'ylog': 1, 'zlog': 1,
+                            'yrange': [1, 2e4], 'ysubtitle': 'Frecuency [Hz]',
+                            'zrange': [1e-8, 1e6], 'ztitle': '$[pT^2/Hz]$'}
+                options(prefix + tvar_names[i] + '_pwr', opt_dict=opt_dict)
+
+    if spec_type == 'amp':
+        tvar_names = ['Emax', 'Eave', 'Bmax', 'Bave']
+        for i in range(4):
+            tvar = get_data(tvar_names[i])
+            tvar_pwr = dB_to_absolute((tvar.y).astype(float), 1e-12)
+            tvar_amp = np.sqrt(tvar_pwr)
+            # mV/m/Hz^0.5 or pT/Hz^0.5
+            store_data(prefix + tvar_names[i] + '_amp',
+                       data={'x': tvar.times, 'y': tvar_amp, 'v': tvar.v})
+            if tvar_names[i] == 'Emax' or tvar_names[i] == 'Eave':
+                opt_dict = {'spec': 1, 'ylog': 1, 'zlog': 1,
+                            'yrange': [1, 2e4], 'ysubtitle': 'Frequency [Hz]',
+                            'zrange': [1e-4, 10], 'ztitle': '$[mV/m/Hz^{0.5}]$'}
+                options(prefix + tvar_names[i] + '_amp', opt_dict=opt_dict)
+            if tvar_names[i] == 'Bmax' or tvar_names[i] == 'Bave':
+                opt_dict = {'spec': 1, 'ylog': 1, 'zlog': 1,
+                            'yrange': [1, 2e4], 'ysubtitle': 'Frequency [Hz]',
+                            'zrange': [1e-4, 1e3], 'ztitle': '$[pT/Hz^{0.5}]$'}
+                options(prefix + tvar_names[i] + '_amp', opt_dict=opt_dict)

@@ -7,12 +7,12 @@ from pytplot import cdf_to_tplot
 from .config import CONFIG
 
 
-def load(trange=['2012-10-01', '2012-10-02'], 
+def load(trange=['2012-10-01', '2012-10-02'],
          instrument='pws',
-         datatype='epd', 
-         level='l2', 
-         suffix='', 
-         get_support_data=False, 
+         datatype='epd',
+         level='l2',
+         suffix='',
+         get_support_data=False,
          varformat=None,
          varnames=[],
          downloadonly=False,
@@ -30,8 +30,8 @@ def load(trange=['2012-10-01', '2012-10-02'],
     """
     prefix = ''
 
+    #  PWS and MCA data are available in CDF files
     if instrument == 'pws':
-        #  only PWS data are available in CDF files
         prefix = 'akb_pws_'
         pathformat = instrument + '/NPW-DS/%Y/ak_h1_pws_%Y%m%d_v??.cdf'
     elif instrument == 'rdm':
@@ -40,6 +40,9 @@ def load(trange=['2012-10-01', '2012-10-02'],
     elif instrument == 'orb':
         prefix = 'akb_orb_'
         pathformat = 'orbit/daily/%Y%m/ED%y%m%d.txt'
+    elif instrument == 'mca':
+        prefix = 'akb_mca_'
+        pathformat = 'ak_h1_mca_%Y%m%d_v02.cdf'
     else:
         logging.error('Unknown instrument: ' + instrument)
         return
@@ -49,14 +52,18 @@ def load(trange=['2012-10-01', '2012-10-02'],
 
     out_files = []
 
-    files = download(remote_file=remote_names, remote_path=CONFIG['remote_data_dir'], local_path=CONFIG['local_data_dir'], no_download=no_update)
+    if instrument != 'mca':
+        files = download(remote_file=remote_names, remote_path=CONFIG['remote_data_dir'], local_path=CONFIG['local_data_dir'], no_download=no_update)
+    if instrument == 'mca':
+        remote_path = 'https://akebono-vlf.db.kanazawa-u.ac.jp/permalink.php?keyword='
+        files = download(remote_file=remote_names, remote_path=remote_path, local_path=CONFIG['local_data_dir']+'mca/', no_download=no_update)
+    
     if files is not None:
         for file in files:
             out_files.append(file)
 
     out_files = sorted(out_files)
-
-    if downloadonly or instrument != 'pws':
+    if downloadonly or (instrument != 'pws' and instrument != 'mca'):
         return out_files
 
     tvars = cdf_to_tplot(out_files, prefix=prefix, suffix=suffix, get_support_data=get_support_data, varformat=varformat, varnames=varnames, notplot=notplot)
